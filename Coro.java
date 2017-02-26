@@ -35,58 +35,63 @@ public class Coro<R, T> {
             f.apply(x -> new Coro<>(dummy -> k.apply(x))).runContT(k));
     }
 
-    private static <R, T, S> Coro<R, T> liftState(final State<S, T> s) {
+    private static <R, T> Coro<R, T> liftState(final State<Queue<Coro<R, Unit>>, T> s) {
         return new Coro<>(k -> s.bind(k));
     }
     private static <R, T> Coro<R, T> liftIO(Supplier<T> f) {
         return new Coro<>(k -> k.apply(f.get()));
     }
 
-    private static final Coro<?, Queue<Coro<?, Unit>>> getProcs = liftState(State.get);
+    private static <R> Coro<R, Queue<Coro<R, Unit>>> getProcs() {
+        return liftState(State.get());
+    }
     private static <R> Coro<R, Unit> putProcs(Queue<Coro<R, Unit>> s) {
         return liftState(State.put(s));
     }
 
-    private static final Coro dequeue =
-        getProcs.bind(procs -> {
+    private static <R> Coro<R, Unit> dequeue() {
+        return getProcs().bind(procs -> {
             Coro p = procs.poll();
             return p == null ? pure(new Unit()) : p;
         });
+    }
     private static <R> Coro<R, Unit> enqueue(Coro<R, Unit> p) {
-        return getProcs.bind(procs -> {
+        return getProcs().bind(procs -> {
             procs.add(p);
             return putProcs(procs);
         });
     }
 
-    public static final Coro yield =
-        callCC((final Function<Unit, Coro<?, ?>> k) ->
-            enqueue(k.apply(new Unit())).then(dequeue));
+    public static <R, T> Coro<R, Unit> yield() {
+        return callCC((final Function<Unit, Coro<R, T>> k) ->
+            enqueue(k.apply(new Unit())).then(dequeue()));
+    }
 
     public static <R> Coro<R, Unit> spawn(final Coro<R, Unit> p) {
         return callCC((final Function<Unit, Coro<R, ?>> k) ->
-            enqueue(k.apply(new Unit())).then(p).then(dequeue));
+            enqueue(k.apply(new Unit())).then(p).then(dequeue()));
     }
 
-    public static final Coro exhaust =
-        getProcs.bind(procs -> {
+    public static <R> Coro<R, Unit> exhaust() {
+        return getProcs().bind(procs -> {
             if (procs.isEmpty())
                 return pure(new Unit());
             else
-                return yield.then(exhaust);
+                return yield().then(exhaust());
         });
+    }
 
     private static <R, T, U> Coro<R, T> applyBothLeft(Coro<R, T> l, Coro<R, U> r) {
         return l.bind(x -> r.bind(y -> pure(x)));
     }
 
     public T run() {
-        return applyBothLeft(this, exhaust).runContT(State::pure).eval(new LinkedList());
+        return applyBothLeft(this, exhaust()).runContT(State::pure).eval(new LinkedList());
     }
 
     public static <R> Coro<R, Unit> printNum(int n) {
         return liftIO(() -> { System.out.println(n); return null; })
-            .then(yield);
+            .then(yield());
     }
 
     public static <R, T> Coro<R, Unit> replicate(int n, Coro<R, T> action) {
