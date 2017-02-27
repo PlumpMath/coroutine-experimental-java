@@ -86,12 +86,12 @@ public class Coro<R, T> {
     }
 
     public static <T> T run(Coro<T, T> that) {
-        return applyBothLeft(that, exhaust()).runContT(State::pure).eval(new LinkedList());
+        return applyBothLeft(that, exhaust()).runContT(State::pure).eval(new LinkedList<>());
     }
 
     public static <R> Coro<R, Unit> printNum(int n) {
-        return liftIO(() -> { System.out.println(n); return null; })
-            .then(yield());
+        return Coro.<R, Unit>liftIO(() -> { System.out.println(n); return new Unit(); })
+            .then(Coro.<R>yield());
     }
 
     public static <R, T> Coro<R, Unit> replicate(int n, Coro<R, T> action) {
@@ -102,7 +102,7 @@ public class Coro<R, T> {
     }
 
     public static void main(String[] args) {
-        Coro<Unit, Unit> proc = spawn(replicate(2, printNum(2)))
+        Coro<Unit, Unit> proc = Coro.<Unit>spawn(replicate(2, printNum(2)))
             .then(spawn(replicate(3, printNum(3))))
             .then(replicate(4, printNum(4)));
         run(proc);
