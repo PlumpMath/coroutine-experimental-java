@@ -56,28 +56,28 @@ public class Coro<R, T> {
         });
     }
     private static <R> Coro<R, Unit> enqueue(Coro<R, Unit> p) {
-        return getProcs().bind(procs -> {
+        return Coro.<R>getProcs().bind(procs -> {
             procs.add(p);
             return putProcs(procs);
         });
     }
 
-    public static <R, T> Coro<R, Unit> yield() {
-        return callCC((final Function<Unit, Coro<R, T>> k) ->
+    public static <R> Coro<R, Unit> yield() {
+        return callCC((final Function<Unit, Coro<R, Unit>> k) ->
             enqueue(k.apply(new Unit())).then(dequeue()));
     }
 
     public static <R> Coro<R, Unit> spawn(final Coro<R, Unit> p) {
-        return callCC((final Function<Unit, Coro<R, ?>> k) ->
+        return callCC((final Function<Unit, Coro<R, Unit>> k) ->
             enqueue(k.apply(new Unit())).then(p).then(dequeue()));
     }
 
     public static <R> Coro<R, Unit> exhaust() {
-        return getProcs().bind(procs -> {
+        return Coro.<R>getProcs().bind((Queue<Coro<R, Unit>> procs) -> {
             if (procs.isEmpty())
                 return pure(new Unit());
             else
-                return yield().then(exhaust());
+                return Coro.<R>yield().then(exhaust());
         });
     }
 
@@ -85,8 +85,8 @@ public class Coro<R, T> {
         return l.bind(x -> r.bind(y -> pure(x)));
     }
 
-    public T run() {
-        return applyBothLeft(this, exhaust()).runContT(State::pure).eval(new LinkedList());
+    public static <T> T run(Coro<T, T> that) {
+        return applyBothLeft(that, exhaust()).runContT(State::pure).eval(new LinkedList());
     }
 
     public static <R> Coro<R, Unit> printNum(int n) {
@@ -102,8 +102,9 @@ public class Coro<R, T> {
     }
 
     public static void main(String[] args) {
-        spawn(replicate(2, printNum(2)))
-            .then(spawn(replicate(2, printNum(3))))
-            .then(replicate(3, printNum(3)));
+        Coro<Unit, Unit> proc = spawn(replicate(2, printNum(2)))
+            .then(spawn(replicate(3, printNum(3))))
+            .then(replicate(4, printNum(4)));
+        run(proc);
     }
 }

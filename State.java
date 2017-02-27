@@ -20,6 +20,9 @@ public class State<S, T> {
             return f.apply(inter.result).run(inter.state);
         });
     }
+    public <U> State<S, U> then(State<S, U> m) {
+        return bind(dummy -> m);
+    }
     public static <S> State<S, S> get() {
         return new State<>(s -> new StateResult(s, s));
     }
